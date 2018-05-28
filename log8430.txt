@@ -1,0 +1,89 @@
+package controllers
+
+import javax.inject._
+import java.util.Base64
+import play.api.mvc._
+import play.api.libs.ws._
+import play.api.libs.json.Json
+import play.api.http.{Status => StatusCodes}
+import play.api.Configuration
+import scala.concurrent.ExecutionContext.Implicits.global
+
+/**
+ * This controller creates an `Action` to handle HTTP requests to the
+ * application's home page.
+ */
+@Singleton
+class HomeController @Inject()(cc: ControllerComponents, ws: WSClient) extends AbstractController(cc) {
+
+  /**
+   * Create an Action to render an HTML page with a welcome message.
+   * The configuration in the `routes` file means that this method
+   * will be called when the application receives a `GET` request with
+   * a path of `/`.
+   */
+  val client_id = "7639051b78d44fa6ab87668a60c2a500"
+  val client_secret = "183b436dbaab413e8851e6a142887df8"
+  val response_type = "code"
+  val redirect_uri = "http://localhost:9000/callback"
+  val scope = "user-read-private user-read-email"
+  val grant_type = "authorization_code"
+  val cltStr = client_id + ":" + client_secret
+  val auth = Base64.getEncoder().encode(cltStr.getBytes)
+  val a = auth.toString()
+  val authStr = "Basic " + a
+  
+  def index() = Action { 
+     Redirect("https://accounts.spotify.com/authorize?client_id="+client_id+"&response_type="+response_type+"&redirect_uri="+redirect_uri)
+  }
+  
+  def callback() = Action {request =>
+    val code = request.getQueryString("code").last.toString()
+    val json = Json.obj(
+        "grant_type" -> Seq("authorization_code"),
+        "code" -> code,
+        "redirect_uri" -> redirect_uri,
+        "client_id" -> client_id,
+        "client_secret" -> client_secret
+    )
+    var c = ""
+    val data = "grant_type="+grant_type+"&code="+code+"&redirect_uri="+redirect_uri+"&client_id="+client_id+"&client_secret="+client_secret
+    //ws.url("https://accounts.spotify.com/api/token").addHttpHeaders("Content-Type" -> "application/x-www-form-urlencoded").post(json).map{response => Ok(response.body)}
+    //Ok(Json.toJson(json))  
+    ws.url("https://accounts.spotify.com/api/token").addHttpHeaders("Content-Type" -> "application/x-www-form-urlencoded").post("grant_type="+grant_type+"&code="+code+"&redirect_uri="+redirect_uri+"&client_id="+client_id+"&client_secret="+client_secret).map{
+      response => ws.url("https://api.spotify.com/v1/me").addHttpHeaders("Authorization" -> (response.json \ "access_token").as[String]).get().map{
+        response => c = Json.toJson(response.body).toString()
+                    Ok(Json.toJson(response.body))         
+      }
+      Ok(Json.toJson(response.body))
+      //c = Json.toJson(response.body).toString()
+      }
+    Ok(c)
+  }
+  
+  def searchpage() = Action {request =>
+    Ok("nana")
+  
+  }
+
+}
+
+http://localhost:9000/callback?code=AQCQkRAoiknY5M6Ol0GXbCqaLSJOH5BQzSbUTK65U-8l1UywPCMGpsAesEdWU8AdMkfcHq5gAN-9rE0IhhIJEIs3f5H0Wf414RUyCpwBH-9UyWsbCh2WOuwMv92S8m_wpjYeQ7hPJmX14TuRHTKmlUMD4oCehqRJWQxu2FbRkHVCwWL8u5hvrW_OarIZYrTYdCJZHQ
+
+
+curl -H "Authorization: Basic [B@6b177685" -d grant_type=authorization_code -d code=AQCmyogxJobWC5YDvEMP2gemZ6t1p009y2gldp2fWCs1HvpR2A8TiGA1LuCPwMyEebV4f22VuEM-0Vv6Kd93ruy3D-CVqJUK60K_th55LRzhqrcWSEf7hzgqlv8iyWjolTw3L9r2P1xK5TK1imxe3CWXvW3kvPbQ50Iv6TQM1qRZJ7pcHA1vj-XG4Y1xfK-lVRlJOw -d redirect_uri=https%3A%2F%2Flocalhost%3A9000%2Fcallback https://accounts.spotify.com/api/token
+
+
+def search(token : String) = Action.async{ implicit request =>
+    searchForm.bindFromRequest.fold(
+      formWithErrors => {
+      ws.url("https://api.spotify.com/v1/me").addHttpHeaders("Authorization" -> token).get().map{
+        response => Ok(Json.toJson(response.body))}
+    },
+    contact => {
+      val contactId = contact.name
+      
+      //Redirect(routes.Application.showContact(contactId)).flashing("success" -> "Contact saved!")
+      ws.url("https://api.spotify.com/v1/me").addHttpHeaders("Authorization" -> token).get().map{
+        response => Ok(Json.toJson(response.body))  }       
+    }
